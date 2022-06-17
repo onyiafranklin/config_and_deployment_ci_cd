@@ -1,77 +1,82 @@
+# Use the latest 2.1 version of CircleCI pipeline process engi
+# See: https://circleci.com/docs/2.0/configuration-reference
 version: 2.1
-commands: 
-  destroy_environment: 
-    steps: 
-      - 
-        run: 
-          command: "aws cloudformation delete-stack --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:7}\n"
-          name: "Destroy environment"
+commands:
+  # Exercise - Rollback
+  destroy_environment:
+    steps:
+      - run:
+          name: Destroy environment
+          # ${CIRCLE_WORKFLOW_ID} is a Built-in environment variable 
+          # ${CIRCLE_WORKFLOW_ID:0:5} takes the first 5 chars of the variable CIRCLE_CI_WORKFLOW_ID 
           when: on_fail
-jobs: 
-  configure_infrastructure: 
-    docker: 
-      - 
-        image: "python:3.7-alpine3.11"
-    steps: 
-      - checkout
-      - 
-        add_ssh_keys: 
-          fingerprints: 
-            - "6e:e2:4f:35:8e:c5:c9:98:09:a1:8a:83:8c:53:fa:98"
-      - 
-        run: 
           command: |
-              # Install Ansible
-              apk add --update ansible
-          name: "Install Ansible"
-      - 
-        run: 
-          command: "# Your command  \n\
-              ansible-playbook -i inventory main4.yml  \n"
-          name: "Run Playbook and Configure server"
+            aws cloudformation delete-stack --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:7} 
+# Define a job to be invoked later in a workflow.
+# See: https://circleci.com/docs/2.0/configuration-reference/#jobs
+jobs:
+  say-hello:
+    # Specify the execution environment. You can specify an image from Dockerhub or use one of our Convenience Images from CircleCI's Developer Hub.
+    # See: https://circleci.com/docs/2.0/configuration-reference/#docker-machine-macos-windows-executor
+    docker:
+      - image: cimg/base:stable
+    # Add steps to the job
+    # See: https://circleci.com/docs/2.0/configuration-reference/#steps
+    steps:
+      - checkout
+      - run:
+          name: "Say hello"
+          command: "echo Hello, World!"
   create_infrastructure: 
-    docker: 
-      - 
-        image: amazon/aws-cli
-    steps: 
-      - checkout
-      - 
-        run: 
-          command: |
+      docker:
+        - image: amazon/aws-cli
+      steps:
+        - checkout
+        - run:
+            name: Create Cloudformation Stack
+            command: |
               aws cloudformation deploy \
                 --template-file template.yml \
                 --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:7} \
                 --region us-west-2
-          name: "Create Cloudformation Stack"
-  say-hello: 
-    docker: 
-      - 
-        image: "cimg/base:stable"
-    steps: 
-      - checkout
-      - 
-        run: 
-          command: "echo Hello, World!"
-          name: "Say hello"
-  smoke_test: 
-    docker: 
-      - 
-        image: "alpine:latest"
-    steps: 
-      - checkout
-      - 
-        run: "apk add --update curl"
-      - 
-        run: 
-          command: "return 1"
-          name: "smoke test"
-      - destroy_environment
-workflows: 
-  say-hello-workflow: 
-    jobs: 
-      - create_infrastructure
-      - 
-        smoke_test: 
-          requires: 
-            - create_infrastructure
-
+  configure_infrastructure: 
+      docker:
+        - image: python:3.7-alpine3.11
+      steps:
+        - checkout
+        - add_ssh_keys:
+                # You can get this ID in the section where you registered the SSH Key
+                fingerprints: ["6e:e2:4f:35:8e:c5:c9:98:09:a1:8a:83:8c:53:fa:98"] 
+        # install ansible   now   ok  
+        - run:
+            name: Install Ansible
+            command: |
+              # Install Ansible
+              apk add --update ansible
+        - run:
+            name: Run Playbook and Configure server
+            command: |
+              # Your command  
+              ansible-playbook -i inventory main4.yml  
+  # Exercise: Smoke Testing
+  smoke_test:
+      docker:
+        - image: alpine:latest
+      steps:
+        - checkout
+        - run:
+            name: smoke test
+            command: return 1                 
+        - destroy_environment  
+             
+# Invoke jobs via workflows
+# See: https://circleci.com/docs/2.0/configuration-reference/#workflows
+workflows:
+  say-hello-workflow:
+    jobs:
+      #- say-hello
+     # - create_infrastructure
+      #- configure_infrastructure
+      - smoke_test:
+            requires:
+                - create_infrastructure
